@@ -1,0 +1,19 @@
+LIBRARY ScriptHookRDR2
+EXPORTS
+?getGameVersion@@YA?AW4eGameVersion@@XZ
+?getGlobalPtr@@YAPEA_KH@Z
+?getScriptHandleBaseAddress@@YAPEAEH@Z
+?keyboardHandlerRegister@@YAXP6AXKGEHHHH@Z@Z
+?keyboardHandlerUnregister@@YAXP6AXKGEHHHH@Z@Z
+?nativeCall@@YAPEA_KXZ 
+?nativeInit@@YAX_K@Z 
+?nativePush64@@YAX_K@Z
+?scriptRegister@@YAXPEAUHINSTANCE__@@P6AXXZ@Z 
+?scriptRegisterAdditionalThread@@YAXPEAUHINSTANCE__@@P6AXXZ@Z 
+?scriptUnregister@@YAXP6AXXZ@Z 
+?scriptUnregister@@YAXPEAUHINSTANCE__@@@Z 
+?scriptWait@@YAXK@Z 
+?worldGetAllObjects@@YAHPEAHH@Z 
+?worldGetAllPeds@@YAHPEAHH@Z 
+?worldGetAllPickups@@YAHPEAHH@Z 
+?worldGetAllVehicles@@YAHPEAHH@Z 

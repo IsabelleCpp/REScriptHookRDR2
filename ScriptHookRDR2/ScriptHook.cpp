@@ -267,11 +267,11 @@ struct core_sh_thread
     DWORD ThreadIdParam;
     DWORD WaitUntilThisTime;
     LPVOID pFiber;
-    uintptr_t ThreadStartAddress;
+    LP_SCRIPT_MAIN ThreadStartAddress;
     std::shared_ptr<core_sh_script> sh_script;
 };
 
-
+/*
 struct ThreadTreeMyValue
 {
     int ThreadId;
@@ -282,8 +282,9 @@ struct ThreadTreeMyValue
         return this->ThreadId < rhs.ThreadId;
     }
 };
+*/
+std::map<int, std::shared_ptr<core_sh_thread>> ThreadTree;
 
-std::set<ThreadTreeMyValue> ThreadTree;
 LPVOID lpFiber;
 
 struct MapValPair
@@ -621,6 +622,22 @@ void SCRIPT_HOOK_RDR2_CRITICAL_ERROR(const char* Format, ...)
     MessageBoxA(0i64, Text, "SCRIPT HOOK RDR2 CRITICAL ERROR", MB_ICONERROR);
     ExitProcess(0);
 }
+
+struct Core_this_Struct
+{
+    BYTE gap0[8];
+    unsigned int tid;
+    BYTE gapC[4];
+    DWORD NeedsWait;
+    DWORD NormalCondition;
+    BYTE gap18[1708];
+    DWORD arg2;
+    BYTE gap6C8[16];
+    DWORD Id;
+};
+
+void __fastcall nativeInit(uintptr_t Hash);
+
 typedef unsigned int(__fastcall* CoreFuncType)(Core_this_Struct*, uintptr_t);
 
 CoreFuncType Original_CoreFuncAddr;
@@ -735,6 +752,8 @@ struct GameContext;
 
 typedef __int64(__fastcall* NativeFunc)(GameContext*);
 
+void __fastcall scriptWait(unsigned long WaitTime);
+
 struct GameContext {
     uintptr_t* pRetValues;
     DWORD ArgCount;
@@ -793,7 +812,7 @@ LRESULT CALLBACK WndProchook(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
 
             WORD keyFlags = HIWORD(lParam);
 
-            WORD scanCode = LOBYTE(keyFlags);                             // scan code
+            BYTE scanCode = LOBYTE(keyFlags);                             // scan code
             
             BOOL isExtendedKey = (keyFlags & KF_EXTENDED) == KF_EXTENDED; // extended-key flag, 1 if scancode has 0xE0 prefix
 
@@ -820,8 +839,8 @@ bool IS_THREAD_INACTIVE()
     DWORD k; // eax
     bool ignoreKilledState = false; // [rsp+30h] [rbp+8h]
 
-    const auto it = std::find_if(ThreadTree.begin(), ThreadTree.end(), [](const ThreadTreeMyValue& Thread) {
-    return !Thread.sh_thread->ThreadStartAddress;
+    const auto it = std::find_if(ThreadTree.begin(), ThreadTree.end(), [](const auto& Thread) {
+    return !Thread.second->ThreadStartAddress;
         });
 
     if (it == ThreadTree.end()) {
@@ -829,7 +848,7 @@ bool IS_THREAD_INACTIVE()
         return true;
     }
 
-    ThreadId = it->ThreadId;
+    ThreadId = it->first;
     IS_THREAD_ACTIVE_Native = (NativeFunc)GetNativeFromIndex8bits(0x46E9AE36D8FA6417ui64);
     if (!IS_THREAD_ACTIVE_Native)
     {
@@ -864,19 +883,6 @@ bool IS_THREAD_INACTIVE()
     }
     return *(DWORD*)NativesContext.GamePart.pRetValues == 0;
 }
-
-struct Core_this_Struct
-{
-    BYTE gap0[8];
-    unsigned int tid;
-    BYTE gapC[4];
-    DWORD NeedsWait;
-    DWORD NormalCondition;
-    BYTE gap18[1708];
-    DWORD arg2;
-    BYTE gap6C8[16];
-    DWORD Id;
-};
 
 
 int SCRIPT_HOOK_RDR2_ERROR(const char* Format, ...)
@@ -958,13 +964,85 @@ void __stdcall REQUEST_SCRIPT_WITH_NAME_HASH_0x6758BF00()
     nativeCall();
 }
 
+DWORD START_NEW_SCRIPT_WITH_NAME_AudioTest_HASH()
+{
+    nativeInit(0xEB1C67C3A5333A92ui64);
+    NativesContext.GamePart.pArgs[NativesContext.GamePart.ArgCount++] = 0x6758BF00i64;
+    NativesContext.GamePart.pArgs[NativesContext.GamePart.ArgCount++] = 0x400i64;
+    return *(unsigned int*)nativeCall();
+}
+
+unsigned __int64* SET_SCRIPT_WITH_NAME_audiotest_HASH_AS_NO_LONGER_NEEDED()
+{
+    __int64(__fastcall * NativeFromIndex8bits)(uintptr_t); // rbx
+    uintptr_t DefaultNative; // rax
+
+    NativeFromIndex8bits = (__int64(__fastcall*)(uintptr_t))GetNativeFromIndex8bits(0x50723A1567C8361Eui64);
+    if (!NativeFromIndex8bits)
+    {
+        GetNativesVer();
+        NativeFromIndex8bits = (__int64(__fastcall*)(uintptr_t))GetNativeAddrFromHash_Wrapper(0x50723A1567C8361Eui64);
+        AppendNativeToVec(0x50723A1567C8361Eui64, (uintptr_t)NativeFromIndex8bits);
+    }
+    DefaultNative = DefaultNativeValue_From_0xAAAAAAAAAAAAAAAA;
+    if (!DefaultNativeValue_From_0xAAAAAAAAAAAAAAAA)
+    {
+        DefaultNative = GetNativeAddrFromHash_Wrapper(0xAAAAAAAAAAAAAAAAui64);
+        DefaultNativeValue_From_0xAAAAAAAAAAAAAAAA = DefaultNative;
+    }
+    if (!NativeFromIndex8bits || NativeFromIndex8bits == (__int64(__fastcall*)(uintptr_t))DefaultNative)
+        SCRIPT_HOOK_RDR2_CRITICAL_ERROR("FATAL: Can't find native 0x%016llX", 0x50723A1567C8361Ei64);
+    memset(&NativesContext, 0, sizeof(NativesContext));
+    NativesContext.GamePart.pRetValues = NativesContext.RetValues;
+    NativesContext.GamePart.pArgs = NativesContext.Args;
+    NativesContext.GamePart.Native = (NativeFunc)NativeFromIndex8bits;
+    NativesContext.Args[NativesContext.GamePart.ArgCount++] = 0x6758BF00i64;
+    return nativeCall();
+}
+
+BOOL __fastcall IS_THREAD_ACTIVE(unsigned int ThreadId)
+{
+    nativeInit(0x46E9AE36D8FA6417ui64);
+    NativesContext.GamePart.pArgs[NativesContext.GamePart.ArgCount++] = ThreadId;
+    NativesContext.GamePart.pArgs[NativesContext.GamePart.ArgCount++] = 0i64;
+    return *(unsigned int*)nativeCall();
+}
+
+unsigned __int64* __fastcall TERMINATE_THREAD_wrapp(unsigned int a1)
+{
+    __int64(__fastcall * NativeFromIndex8bits)(uintptr_t); // rbx
+    uintptr_t NativeAddrFromHash_Wrapper; // rax
+
+    NativeFromIndex8bits = (__int64(__fastcall*)(uintptr_t))GetNativeFromIndex8bits(0x87ED52AE40EA1A52ui64);
+    if (!NativeFromIndex8bits)
+    {
+        GetNativesVer();
+        NativeFromIndex8bits = (__int64(__fastcall*)(uintptr_t))GetNativeAddrFromHash_Wrapper(0x87ED52AE40EA1A52ui64);
+        AppendNativeToVec(0x87ED52AE40EA1A52ui64, (uintptr_t)NativeFromIndex8bits);
+    }
+    NativeAddrFromHash_Wrapper = DefaultNativeValue_From_0xAAAAAAAAAAAAAAAA;
+    if (!DefaultNativeValue_From_0xAAAAAAAAAAAAAAAA)
+    {
+        NativeAddrFromHash_Wrapper = GetNativeAddrFromHash_Wrapper(0xAAAAAAAAAAAAAAAAui64);
+        DefaultNativeValue_From_0xAAAAAAAAAAAAAAAA = NativeAddrFromHash_Wrapper;
+    }
+    if (!NativeFromIndex8bits || NativeFromIndex8bits == (__int64(__fastcall*)(uintptr_t))NativeAddrFromHash_Wrapper)
+        SCRIPT_HOOK_RDR2_CRITICAL_ERROR("FATAL: Can't find native 0x%016llX", 0x87ED52AE40EA1A52ui64);
+    memset(&NativesContext, 0, sizeof(NativesContext));
+    NativesContext.GamePart.pRetValues = NativesContext.RetValues;
+    NativesContext.GamePart.pArgs = NativesContext.Args;
+    NativesContext.GamePart.Native = (NativeFunc)NativeFromIndex8bits;
+    NativesContext.Args[NativesContext.GamePart.ArgCount++] = a1;
+    return nativeCall();
+}
+
 uintptr_t GetThreadLocalStoragePointer()
 {
     return __readgsqword(0x58); // NtCurrentTeb()->ThreadLocalStoragePointer;
 }
 int Coretid = -1;
 
-char __fastcall CallThreadMainFunc(void (*main)(void))
+char __fastcall CallThreadMainFunc(LP_SCRIPT_MAIN main)
 {
     __try {
         main();
@@ -976,41 +1054,32 @@ char __fastcall CallThreadMainFunc(void (*main)(void))
     return 1;
 }
 
-void __fastcall FiberStartAddress(__int64 ThreadIdlpFiberParameter)
+void __fastcall FiberStartAddress(DWORD ThreadIdlpFiberParameter)
 {
-    auto it = std::find_if(ThreadTree.begin(), ThreadTree.end(), [ThreadIdlpFiberParameter](const ThreadTreeMyValue& Thread) {
-        return Thread.ThreadId == ThreadIdlpFiberParameter;
-        });
-
-    if (it == ThreadTree.end())
-    {
-        ThreadTreeMyValue MyValue{};
-        MyValue.ThreadId = ThreadIdlpFiberParameter;
-        it = ThreadTree.insert(MyValue).first;
-    }
+    const auto& Thread = ThreadTree[ThreadIdlpFiberParameter];
  
     ScriptHook_Log_Message(
         "CORE: Waiting to launch '%s' (0x%016llX), id %d",
-        it->sh_thread->sh_script->ScriptName,
-        it->sh_thread->ThreadStartAddress,
-        it->sh_thread->ThreadIdParam);
+        Thread->sh_script->ScriptName,
+        Thread->ThreadStartAddress,
+        Thread->ThreadIdParam);
 
     while (GET_IS_LOADING_SCREEN_ACTIVE_wrapper())
         scriptWait(0);
 
     ScriptHook_Log_Message(
         "CORE: Launching main() for '%s' (0x%016llX), id %d",
-        it->sh_thread->sh_script->ScriptName,
-        it->sh_thread->ThreadStartAddress,
-        it->sh_thread->ThreadIdParam);
+        Thread->sh_script->ScriptName,
+        Thread->ThreadStartAddress,
+        Thread->ThreadIdParam);
 
-    if (!CallThreadMainFunc((void (*)(void))it->sh_thread->ThreadStartAddress))
+    if (!CallThreadMainFunc(Thread->ThreadStartAddress))
     {
         SCRIPT_HOOK_RDR2_ERROR(
             "CORE: An exception occurred while executing '%s' (0x%016llX), id %d",
-            it->sh_thread->sh_script->ScriptName,
-            it->sh_thread->ThreadStartAddress,
-            it->sh_thread->ThreadIdParam);
+            Thread->sh_script->ScriptName,
+            Thread->ThreadStartAddress,
+            Thread->ThreadIdParam);
     }
 
     scriptWait(86400000);
@@ -1018,169 +1087,17 @@ void __fastcall FiberStartAddress(__int64 ThreadIdlpFiberParameter)
 
 __int64 __fastcall CoreHook(Core_this_Struct* main, unsigned int a2)
 {
-    CoreFuncType CoreOrigFunc; // r14
-    uintptr_t ThreadTableRVA; // r13
-    __int64 RDR2RVA; // r15
-    __int64 RVAga5; // rdi
-    __int64 RVAga6; // rbx
-    bool* pSomeBool; // rbx
-    void(__fastcall * SomeRelevantFunc)(uintptr_t); // r12
-    Core_this_Struct* this_1; // rdi
-    __int64 unusedvar; // rcx
-    ThreadTreeNode* ThreadTree_Myhead_1; // rdi
-    ThreadTreeNode* ThreadTree_Node_1; // rbx
-    ThreadTreeNode* ThreadTree_Node__Right; // rax
-    ThreadTreeNode* kk; // rax
-    ThreadTreeNode* jj; // rax
-    ThreadTreeNode* _ThreadTreeNode; // rbx
-    core::sh_thread* ShThreadObject; // rcx
-    ThreadTreeNode* ThreadTreeNode_Right; // rax
-    ThreadTreeNode* nn; // rax
-    ThreadTreeNode* mm; // rax
-    ThreadTreeNode* ThreadTree_Myhead_1_Parent; // r14
-    ThreadTreeNode* ThreadTree_Myhead_1_Parent_1; // rsi
-    std::_Ref_count_obj__core::sh_thread__* ThreadTreeShThreadRefCount; // rbx
-    __int64(__fastcall * START_NEW_SCRIPT_WITH_NAME_HASH)(_QWORD); // rbx
-    uintptr_t NativeAddrFromHash_Wrapper; // rax
-    DWORD i1; // eax
-    __int64 UselessIndex; // rax
-    ArgRetData* UselessDstResults; // rcx
-    __int64 NewThreadId; // rcx
-    ThreadTreeNode* ThreadTree_Myhead_Parent; // rax
-    ThreadTreeNode* InsetionResultNode; // rbx
-    core::sh_thread* sh_thread__Object; // rdx
-    ThreadTreeNode* ThreadNode_1; // rax
-    ThreadTreeNode* UnusedVar_1; // rcx
-    std::_Ref_count_obj__core::sh_thread__* ShThreadRefCOutnObj; // rax
-    std::_Ref_count_obj__core::sh_thread__* ShThreadRefcountObj; // rcx
-    std::_Ref_count_obj__core::sh_thread__* ShThreadRefCOutnObj2_1; // rbx
-    MainRefCountObjStruct* ScriptVector__Myfirst; // rsi
-    MainRefCountObjStruct* ScriptVector_Mylast; // r15
-    std__Set* ScriptVecHead; // r14
-    std__Set* ScriptVecNode; // rbx
-    QWORD SCRIPT_MAIN; // r12
-    __int64(__fastcall * START_NEW_SCRIPT_WITH_NAME_HASH_1)(_QWORD); // rdi
-    int NativsVersion; // eax
-    __int64 DefNativevalueIrrelevant_1; // rax
-    DWORD ResultCount; // eax
-    __int64 PointlessResultCount; // rax
-    ArgRetData* DstresultPointless; // rcx
-    core::sh_thread* NewMainShThread_Object; // rdx
-    std::_Ref_count_obj__core::sh_script__* ScriptVector__Myfirst_RefCountObj; // rax
-    core::sh_script* ScriptVector__Myfirst_Object; // r8
-    std::_Ref_count_obj__core::sh_script__* ThreadIdParam; // rcx
-    std::_Ref_count_obj__core::sh_script__* NewMainShThread_Object_sh_script_RefCountObj_1; // rdi
-    ThreadTreeNode* ThreadTree_Myhead_Parent_1; // rax
-    ThreadTreeNode* ThreadTree_Myhead_2; // rdi
-    core::sh_thread* NewMainShThread_Object_1; // rdx
-    ThreadTreeNode* ShThreadNode; // rax
-    ThreadTreeNode* UnusedVar_2; // rcx
-    std::_Ref_count_obj__core::sh_thread__* NewMainShThread_RefCountObj; // rax
-    std::_Ref_count_obj__core::sh_thread__* ShThreadRefCOutnObj2_2; // rcx
-    std::_Ref_count_obj__core::sh_thread__* ThreadTree_Myhead_2_MyValue_MainShThread_RefCountObj_1; // rdi
-    std::_Ref_count_obj__core::sh_thread__* NewMainShThread_RefCountObj_1; // rdi
-    std__Set* ScriptVecNode_Right; // rax
-    std__Set* i3; // rax
-    std__Set* i2; // rax
-    struct_ThreadTable* ThreadTableCopyToCheck; // rax
-    unsigned int CoreOrigFuncReturnValue; // edi
-    std::_Ref_count_obj__core::sh_thread__* sh_thread___RefCountObj; // rbx
-    int Id; // r9d
-    signed int tid; // edx
-    ThreadTreeNode* Parent; // rax
-    ThreadTreeNode* _NodeResult; // rcx
-    ThreadTreeNode** pNodeResult; // rax
-    struct_ThreadTable* ThreadTable; // r13
-    __int64 tid_1; // rcx
-    ThreadTreeNode* _Parent; // rax
-    ThreadTreeNode* iterator; // rbx
-    ThreadTreeNode* ThreadNode; // rax
-    ThreadTreeNode* UndefinedVar; // rcx
-    std::_Ref_count_obj__core::sh_thread__* sh_thread_RefCount; // r15
-    core::sh_thread* sh_Thread_Object; // rsi
-    int NeedsWait; // eax
-    DWORD TickCount; // eax
-    core::sh_thread* VirtualKey_R_Expiration_Or_shtObject; // rcx
-    ThreadTreeNode* ThreadTree_Myhead; // rdi
-    ThreadTreeNode* ThreadTree_Node; // rbx
-    core::sh_thread* Object; // rax
-    ThreadTreeNode* ThreadtreeRightNode; // rax
-    ThreadTreeNode* m; // rax
-    ThreadTreeNode* k; // rax
-    __int64 UnusedVar_3; // rcx
-    MainRefCountObjStructForShThread* MainShThread_1; // rax
-    StringSetStruct* StdStringSetHead; // rdi
-    StringSetStruct* StdStringSetNode; // rbx
-    char_String_val* p_lpModuleName; // rcx
-    HMODULE ModuleHandleA; // rax
-    StringSetStruct* Std_StringRightNode; // rax
-    StringSetStruct* ii; // rax
-    StringSetStruct* n; // rax
-    StringSetStruct* Std_Set_Strings_Myhead; // rdi
-    StringSetStruct* Std_Set_Strings_Node; // rbx
-    char_String_val* p_lpLibFileName; // rcx
-    StringSetStruct* Right; // rax
-    StringSetStruct* j; // rax
-    StringSetStruct* i; // rax
-    __int64 RDR2RVA_2; // r12
-    uintptr_t ThreadTableRVA_2; // rax
-    MainRefCountObjStruct* Myfirst; // rbx
-    MainRefCountObjStruct* Mylast; // rsi
-    std__Set* ScriptHead; // rdi
-    std__Set* ScriptNode; // rax
-    LP_SCRIPT_MAIN ScriptMainFunc; // r14
-    __int64 Unused; // rcx
-    MainRefCountObjStructForShThread* MainShThread; // rax
-    std::_Ref_count_obj__core::sh_thread__* RefCountObj; // r14
-    __int64 BeepCount_1; // rbx
-    __int64 BeepCount; // rbx
-    __int64 RDR2RVA_1; // [rsp+30h] [rbp-D0h]
-    uintptr_t ThreadTableRVA_1; // [rsp+40h] [rbp-C0h]
-    CoreFuncType CoreOrigFunc_1; // [rsp+50h] [rbp-B0h]
-    unsigned int tid_2; // [rsp+5Ch] [rbp-A4h] BYREF
-    MainRefCountObjStructForShThread NewMainShThread; // [rsp+60h] [rbp-A0h] BYREF
-    MainRefCountObjStructForShThread AudioTest_sh_Thread; // [rsp+70h] [rbp-90h] BYREF
-    __int64 DefNativevalueIrrelevant; // [rsp+80h] [rbp-80h] BYREF
-    bool* ThreadTableNotEmptyBool; // [rsp+88h] [rbp-78h]
-    __int64 DefNativevalueIrrelevant_2; // [rsp+90h] [rbp-70h] BYREF
-    MainRefCountObjStructForShThread sh_thread__; // [rsp+98h] [rbp-68h] BYREF
-    __int64 _BG_SET_TEXT_SCALE; // [rsp+A8h] [rbp-58h] BYREF
-    __int64(__fastcall * START_NEW_SCRIPT_WITH_NAME_HASH_Old)(_QWORD); // [rsp+B0h] [rbp-50h] BYREF
-    __int64 Old_SET_TEXT_SCALE; // [rsp+B8h] [rbp-48h] BYREF
-    std__Set* Script_Node; // [rsp+C0h] [rbp-40h] BYREF
-    __int64(__fastcall * START_NEW_SCRIPT_WITH_NAME_HASH_2)(_QWORD); // [rsp+C8h] [rbp-38h] BYREF
-    ThreadTreeNode* Myhead; // [rsp+D0h] [rbp-30h] BYREF
-    unsigned int* p_tid_2; // [rsp+D8h] [rbp-28h] BYREF
-    struct_ThreadTable* ThreadTableCopyToStore; // [rsp+E0h] [rbp-20h]
-    std_ThreadTreeResult_std_pair NodeResult__; // [rsp+E8h] [rbp-18h] BYREF
-    MainRefCountObjStruct* ScriptVector___Mylast; // [rsp+F8h] [rbp-8h]
-    MainRefCountObjStructForShThread MainshThread; // [rsp+100h] [rbp+0h] BYREF
-    std_ThreadTreeResult_std_pair threadNodeinsertionResult; // [rsp+110h] [rbp+10h] BYREF
-    std::_Ref_count_obj__core::sh_thread__* ShThreadRefCOutnObj2; // [rsp+128h] [rbp+28h]
-    std::_Ref_count_obj__core::sh_script__* NewMainShThread_Object_sh_script_RefCountObj; // [rsp+138h] [rbp+38h]
-    MainRefCountObjStructForShThread ShThreadMainRefCountObject; // [rsp+140h] [rbp+40h] BYREF
-    std::_Ref_count_obj__core::sh_thread__* ThreadTree_Myhead_2_MyValue_MainShThread_RefCountObj; // [rsp+158h] [rbp+58h]
-    __int64 UnusedVar; // [rsp+160h] [rbp+60h]
-    GetNativeAddrFromHashStruct irrelevantnativesStruct_1; // [rsp+170h] [rbp+70h] BYREF
-    GetNativeAddrFromHashStruct irrelevantnativesStruct_2; // [rsp+1C0h] [rbp+C0h] BYREF
-    GetNativeAddrFromHashStruct irrelevantnativesStruct; // [rsp+210h] [rbp+110h] BYREF
-    GetNativeAddrFromHashStruct irrelevantnativesStruct_3; // [rsp+260h] [rbp+160h] BYREF
-    GetNativeAddrFromHashStruct IrrelevantNativeFromhashStruct; // [rsp+2B0h] [rbp+1B0h] BYREF
-    GetNativeAddrFromHashStruct irrelevantnativesStruct_4; // [rsp+300h] [rbp+200h] BYREF
-    char_String_val lpLibFileName; // [rsp+350h] [rbp+250h] BYREF
-    char_String_val lpModuleName; // [rsp+370h] [rbp+270h] BYREF
-
-    CoreOrigFunc = Original_CoreFuncAddr;
-    CoreOrigFunc_1 = Original_CoreFuncAddr;
-    ThreadTableRVA = MainAddressTable.ga3.VER[GameVersion];
-    ThreadTableRVA_1 = ThreadTableRVA;
-    RDR2RVA = RDR2_RVA;
-    RDR2RVA_1 = RDR2_RVA;
-    RVAga5 = *(unsigned int*)(RDR2_RVA + MainAddressTable.ga5.VER[GameVersion]);
-    RVAga6 = DWORD(MainAddressTable.ga6.VER[GameVersion]);
-    pSomeBool = (bool*)(*((uintptr_t*)GetThreadLocalStoragePointer() + RVAga5) + RVAga6);
-    ThreadTableNotEmptyBool = pSomeBool;
-    SomeRelevantFunc = (void(__fastcall*)(uintptr_t))(MainAddressTable.ga9.VER[GameVersion] + RDR2_RVA);
+    auto CoreOrigFunc = Original_CoreFuncAddr;
+    auto CoreOrigFunc_1 = Original_CoreFuncAddr;
+    auto ThreadTableRVA = MainAddressTable.ga3.VER[GameVersion];
+    auto ThreadTableRVA_1 = ThreadTableRVA;
+    auto RDR2RVA = RDR2_RVA;
+    auto RDR2RVA_1 = RDR2_RVA;
+    auto RVAga5 = *(unsigned int*)(RDR2_RVA + MainAddressTable.ga5.VER[GameVersion]);
+    auto RVAga6 = DWORD(MainAddressTable.ga6.VER[GameVersion]);
+    auto pSomeBool = (bool*)(*((uintptr_t*)GetThreadLocalStoragePointer() + RVAga5) + RVAga6);
+    auto ThreadTableNotEmptyBool = pSomeBool;
+    auto SomeRelevantFunc = (void(__fastcall*)(uintptr_t))(MainAddressTable.ga9.VER[GameVersion] + RDR2_RVA);
     if (Coretid == -1)
         goto Init;
     if (Coretid != GetCurrentThreadId())
@@ -1192,21 +1109,19 @@ __int64 __fastcall CoreHook(Core_this_Struct* main, unsigned int a2)
         ConvertThreadToFiber(0i64);
         lpFiber = (PVOID)__readgsqword(0x20); // FIELD_OFFSET(NT_TIB, FiberData); // OR GetCurrentFiber();
     }
-    this_1 = main;
+    auto this_1 = main;
     if (main->Id != 0xC7DC3A09 || main->NormalCondition || !IS_THREAD_INACTIVE())
     {
-        Id = main->Id;
-        tid = main->tid;
+        auto Id = main->Id;
+        auto tid = main->tid;
 
-        auto it = std::find_if(ThreadTree.begin(), ThreadTree.end(), [tid](const ThreadTreeMyValue& Thread) {
-            return Thread.ThreadId == tid;
-        });
+        auto it = ThreadTree.find(tid);
 
         if (Id != 0x6758BF00 || it == ThreadTree.end()) {
             if (Id == 0x3DEB3185)
             {
                 ScriptHook_Log_Message("CORE: Terminating the game, disable mods in order to go Online");
-                BeepCount = 3i64;
+                auto BeepCount = 3i64;
                 do
                 {
                     MessageBeep(0);
@@ -1218,32 +1133,20 @@ __int64 __fastcall CoreHook(Core_this_Struct* main, unsigned int a2)
             return CoreOrigFunc(main, a2);
         }
         main->arg2 = a2;
-        ThreadTable = *(struct_ThreadTable**)(RDR2RVA + ThreadTableRVA);
+        auto ThreadTable = *(struct_ThreadTable**)(RDR2RVA + ThreadTableRVA);
         *(uintptr_t*)(RDR2RVA + ThreadTableRVA_1) = (uintptr_t)main;
         *pSomeBool = 1;
-
-        auto it = std::find_if(ThreadTree.begin(), ThreadTree.end(), [tid](const ThreadTreeMyValue& Thread) {
-            return Thread.ThreadId == tid;
-        });
-
-        if (it == ThreadTree.end())
-        {
-            ThreadTreeMyValue MyValue{};
-            MyValue.ThreadId = tid;
-            it = ThreadTree.insert(MyValue).first;
-        }
        
-        if (it->sh_thread->ThreadStartAddress)
+        if (it->second->ThreadStartAddress)
         {
-            if (!it->sh_thread->pFiber)
-                it->sh_thread->pFiber = CreateFiber(0i64, (LPFIBER_START_ROUTINE)FiberStartAddress, (LPVOID)it->sh_thread->ThreadIdParam);
-            NeedsWait = main->NeedsWait;
-            if (!NeedsWait || NeedsWait == 1 && sh_Thread_Object->WaitUntilThisTime <= GetTickCount())
+            if (!it->second->pFiber)
+                it->second->pFiber = CreateFiber(0i64, (LPFIBER_START_ROUTINE)FiberStartAddress, (LPVOID)it->second->ThreadIdParam);
+            auto NeedsWait = main->NeedsWait;
+            if (!NeedsWait || NeedsWait == 1 && it->second->WaitUntilThisTime <= GetTickCount())
             {
                 main->NeedsWait = 0;
-                SwitchToFiber(sh_Thread_Object->pFiber);
+                SwitchToFiber(it->second->pFiber);
             }
-            RDR2RVA_2 = RDR2RVA_1;
             goto SetThreadTable;
         }
         main->NeedsWait = 0;
@@ -1252,7 +1155,7 @@ __int64 __fastcall CoreHook(Core_this_Struct* main, unsigned int a2)
             if (GetTickCount() < VkStatesArray[VK_CONTROL].TickCountWhenPressed + 5000
                 && !VkStatesArray[VK_CONTROL].isUpNow)
             {
-                TickCount = GetTickCount();
+                auto TickCount = GetTickCount();
                 auto VK_R_Expiration = (VkStatesArray['R'].TickCountWhenPressed + 100);
                 if (TickCount < VK_R_Expiration)
                 {
@@ -1260,89 +1163,34 @@ __int64 __fastcall CoreHook(Core_this_Struct* main, unsigned int a2)
                     {
                         VkStatesArray['R'] = VirtualKeyDataEntry{0};
                         
-                        if (ThreadTree._Mysize <= 1ui64)
+                        if (ThreadTree.size() <= 1ui64)
                         {
-                            if (ThreadTree._Mysize == 1 && ScriptVector._Myfirst == ScriptVector._Mylast)
+                            if (ThreadTree.size() == 1 && ScriptVector.empty())
                             {
-                                Std_Set_Strings_Myhead = Std_Set_Strings._Myhead;
-                                Std_Set_Strings_Node = Std_Set_Strings._Myhead->_Left;
-                                while (Std_Set_Strings_Node != Std_Set_Strings_Myhead)
+                                for (const auto& ScriptPath : ScriptPathsSet)
                                 {
-                                    lpLibFileName._Myres = 15i64;
-                                    lpLibFileName._Mysize = 0i64;
-                                    lpLibFileName._Bx._Buf[0] = 0;
-                                    Std_SubString(&lpLibFileName, &Std_Set_Strings_Node->String, 0i64, 0xFFFFFFFFFFFFFFFFui64);
-                                    p_lpLibFileName = &lpLibFileName;
-                                    if (lpLibFileName._Myres >= 0x10)
-                                        p_lpLibFileName = (char_String_val*)lpLibFileName._Bx._Ptr;
-                                    LoadLibraryA(p_lpLibFileName->_Bx._Buf);
-                                    if (lpLibFileName._Myres >= 0x10)
-                                        j_free(lpLibFileName._Bx._Ptr);
-                                    if (!Std_Set_Strings_Node->_Isnil)
-                                    {
-                                        Right = Std_Set_Strings_Node->_Right;
-                                        if (Right->_Isnil)
-                                        {
-                                            for (i = Std_Set_Strings_Node->_Parent; !i->_Isnil; i = i->_Parent)
-                                            {
-                                                if (Std_Set_Strings_Node != i->_Right)
-                                                    break;
-                                                Std_Set_Strings_Node = i;
-                                            }
-                                            Std_Set_Strings_Node = i;
-                                        }
-                                        else
-                                        {
-                                            Std_Set_Strings_Node = Std_Set_Strings_Node->_Right;
-                                            for (j = Right->_Left; !j->_Isnil; j = j->_Left)
-                                                Std_Set_Strings_Node = j;
-                                        }
-                                    }
+                                    LoadLibraryA(ScriptPath.c_str());
                                 }
                                 REQUEST_SCRIPT_WITH_NAME_HASH_0x6758BF00();
                                 SomeRelevantFunc(0i64);
-                                RDR2RVA_2 = RDR2RVA_1;
-                                ThreadTableRVA_2 = ThreadTableRVA_1;
-                                *(_QWORD*)(RDR2RVA_1 + ThreadTableRVA_1) = 0i64;
-                                Myfirst = ScriptVector._Myfirst;
-                                Mylast = ScriptVector._Mylast;
-                                if (ScriptVector._Myfirst != ScriptVector._Mylast)
+                                *(uintptr_t*)(RDR2RVA_1 + ThreadTableRVA_1) = 0i64;
+
+                                for (const auto& Script : ScriptVector)
                                 {
-                                    do
+                                    for (const auto& MainScript : Script->MainScriptsSet)
                                     {
-                                        ScriptHead = Myfirst->Object->Set_Of_LP_SCRIPT_MAIN._Myhead;
-                                        ScriptNode = ScriptHead->_Left;
-                                        for (Script_Node = ScriptNode; Script_Node != ScriptHead; ScriptNode = Script_Node)
-                                        {
-                                            ScriptMainFunc = ScriptNode->SCRIPT_MAIN;
-                                            Construct_ShThread(&AudioTest_sh_Thread);
-                                            AudioTest_sh_Thread.Object->ThreadIdParam = START_NEW_SCRIPT_WITH_NAME_AudioTest_HASH();
-                                            AcquireRefCountObject(
-                                                (MainRefCountObjStructForShThread*)&AudioTest_sh_Thread.Object->sh_script,
-                                                (MainRefCountObjStructForShThread*)Myfirst);
-                                            AudioTest_sh_Thread.Object->ThreadStartAddress = (QWORD)ScriptMainFunc;
-                                            MainShThread = GetMainShThread(Unused, AudioTest_sh_Thread.Object);
-                                            AcquireRefCountObject(MainShThread, &AudioTest_sh_Thread);
-                                            RefCountObj = AudioTest_sh_Thread.RefCountObj;
-                                            if (AudioTest_sh_Thread.RefCountObj)
-                                            {
-                                                if (!_InterlockedDecrement(&AudioTest_sh_Thread.RefCountObj->Count_8))
-                                                {
-                                                    RefCountObj->Vftbl->RefCount8Release((std::_Ref_count_obj__core::sh_script__*)RefCountObj);
-                                                    if (!_InterlockedDecrement(&RefCountObj->Count_C))
-                                                        RefCountObj->Vftbl->RefCountCRelease((std::_Ref_count_obj__core::sh_script__*)RefCountObj);
-                                                }
-                                            }
-                                            GetNextScriptNode(&Script_Node);
-                                        }
-                                        ++Myfirst;
-                                    } while (Myfirst != Mylast);
-                                    ThreadTableRVA_2 = ThreadTableRVA_1;
+                                        std::shared_ptr<core_sh_thread> AudioTest_sh_Thread{};
+                                        AudioTest_sh_Thread->ThreadIdParam = START_NEW_SCRIPT_WITH_NAME_AudioTest_HASH();
+                                        AudioTest_sh_Thread->sh_script = Script;
+                                        AudioTest_sh_Thread->ThreadStartAddress = MainScript;
+                                        ThreadTree[AudioTest_sh_Thread->ThreadIdParam] = std::move(AudioTest_sh_Thread);
+                                    }
                                 }
+
                                 this_1 = main;
-                                *(_QWORD*)(RDR2RVA_1 + ThreadTableRVA_2) = main;
+                                *(Core_this_Struct**)(RDR2RVA_1 + ThreadTableRVA) = main;
                                 SET_SCRIPT_WITH_NAME_audiotest_HASH_AS_NO_LONGER_NEEDED();
-                                BeepCount_1 = 3i64;
+                                auto BeepCount_1 = 3i64;
                                 do
                                 {
                                     MessageBeep(0);
@@ -1354,82 +1202,27 @@ __int64 __fastcall CoreHook(Core_this_Struct* main, unsigned int a2)
                         }
                         else
                         {
-                            ThreadTree_Myhead = ThreadTree._Myhead;
-                            ThreadTree_Node = ThreadTree._Myhead->_Left;
-                            while (ThreadTree_Node != ThreadTree_Myhead)
+                            for (auto& ThreadObject : ThreadTree)
                             {
-                                Object = ThreadTree_Node->_MyValue.MainShThread.Object;
+                                auto Object = ThreadObject.second;
                                 if (Object->ThreadStartAddress)
                                 {
-                                    if ((unsigned int)IS_THREAD_ACTIVE(
-                                        (__int64)VirtualKey_R_Expiration_Or_shtObject,
-                                        Object->ThreadIdParam))
-                                        TERMINATE_THREAD_wrapp(ThreadTree_Node->_MyValue.MainShThread.Object->ThreadIdParam);
-                                    VirtualKey_R_Expiration_Or_shtObject = ThreadTree_Node->_MyValue.MainShThread.Object;
-                                    if (VirtualKey_R_Expiration_Or_shtObject->pFiber)
-                                        DeleteFiber(VirtualKey_R_Expiration_Or_shtObject->pFiber);
-                                }
-                                if (!ThreadTree_Node->_Isnil)
-                                {
-                                    ThreadtreeRightNode = ThreadTree_Node->_Right;
-                                    if (ThreadtreeRightNode->_Isnil)
-                                    {
-                                        for (k = ThreadTree_Node->_Parent; !k->_Isnil; k = k->_Parent)
-                                        {
-                                            if (ThreadTree_Node != k->_Right)
-                                                break;
-                                            ThreadTree_Node = k;
-                                        }
-                                        ThreadTree_Node = k;
-                                    }
-                                    else
-                                    {
-                                        ThreadTree_Node = ThreadTree_Node->_Right;
-                                        for (m = ThreadtreeRightNode->_Left; !m->_Isnil; m = m->_Left)
-                                            ThreadTree_Node = m;
-                                    }
+                                    if (IS_THREAD_ACTIVE(Object->ThreadIdParam))
+                                        TERMINATE_THREAD_wrapp(Object->ThreadIdParam);
+                                    if (Object->pFiber)
+                                        DeleteFiber(Object->pFiber);
                                 }
                             }
-                            FreeThreadTree();
-                            MainShThread_1 = GetMainShThread(UnusedVar_3, sh_Thread_Object);
-                            AcquireRefCountObject(MainShThread_1, &ShThreadMainRefCountObject);
-                            StdStringSetHead = Std_Set_Strings._Myhead;
-                            StdStringSetNode = Std_Set_Strings._Myhead->_Left;
-                            while (StdStringSetNode != StdStringSetHead)
+
+                            auto ThreadCopy = it->second;
+                            ThreadTree.clear();
+                            ThreadTree[ThreadCopy->ThreadIdParam] = ThreadCopy;
+                            for (const auto& ScriptPath : ScriptPathsSet)
                             {
-                                lpModuleName._Myres = 15i64;
-                                lpModuleName._Mysize = 0i64;
-                                lpModuleName._Bx._Buf[0] = 0;
-                                Std_SubString(&lpModuleName, &StdStringSetNode->String, 0i64, 0xFFFFFFFFFFFFFFFFui64);
-                                p_lpModuleName = &lpModuleName;
-                                if (lpModuleName._Myres >= 0x10)
-                                    p_lpModuleName = (char_String_val*)lpModuleName._Bx._Ptr;
-                                ModuleHandleA = GetModuleHandleA(p_lpModuleName->_Bx._Buf);
+                                auto ModuleHandleA = GetModuleHandleA(ScriptPath.c_str());
                                 FreeLibrary(ModuleHandleA);
-                                if (lpModuleName._Myres >= 0x10)
-                                    j_free(lpModuleName._Bx._Ptr);
-                                if (!StdStringSetNode->_Isnil)
-                                {
-                                    Std_StringRightNode = StdStringSetNode->_Right;
-                                    if (Std_StringRightNode->_Isnil)
-                                    {
-                                        for (n = StdStringSetNode->_Parent; !n->_Isnil; n = n->_Parent)
-                                        {
-                                            if (StdStringSetNode != n->_Right)
-                                                break;
-                                            StdStringSetNode = n;
-                                        }
-                                        StdStringSetNode = n;
-                                    }
-                                    else
-                                    {
-                                        StdStringSetNode = StdStringSetNode->_Right;
-                                        for (ii = Std_StringRightNode->_Left; !ii->_Isnil; ii = ii->_Left)
-                                            StdStringSetNode = ii;
-                                    }
-                                }
                             }
-                            DecrementRefCoutnForScripts();
+                            ScriptVector.clear();
                             MessageBeep(0);
                             this_1 = main;
                         }
@@ -1437,463 +1230,96 @@ __int64 __fastcall CoreHook(Core_this_Struct* main, unsigned int a2)
                 }
             }
         }
-        RDR2RVA_2 = RDR2RVA_1;
     NeedsWait:
         this_1->NeedsWait = 1;
     SetThreadTable:
-        *(_QWORD*)(RDR2RVA_2 + ThreadTableRVA_1) = ThreadTable;
+        *(uintptr_t*)(RDR2RVA + ThreadTableRVA_1) = (uintptr_t)ThreadTable;
         *ThreadTableNotEmptyBool = ThreadTable != 0i64;
-        CoreOrigFuncReturnValue = this_1->NeedsWait;
-        if (sh_thread_RefCount)
-        {
-            if (!_InterlockedDecrement(&sh_thread_RefCount->Count_8))
-            {
-                sh_thread_RefCount->Vftbl->RefCount8Release((std::_Ref_count_obj__core::sh_script__*)sh_thread_RefCount);
-                if (!_InterlockedDecrement(&sh_thread_RefCount->Count_C))
-                    sh_thread_RefCount->Vftbl->RefCountCRelease((std::_Ref_count_obj__core::sh_script__*)sh_thread_RefCount);
-            }
-        }
+        auto CoreOrigFuncReturnValue = this_1->NeedsWait;
         return CoreOrigFuncReturnValue;
     }
     ScriptHook_Log_Message("CORE: Creating threads");
     main->arg2 = a2;
-    ThreadTableCopyToStore = *(struct_ThreadTable**)(RDR2RVA + ThreadTableRVA);
-    *(_QWORD*)(RDR2RVA + ThreadTableRVA) = main;
+    auto ThreadTableCopyToStore = *(struct_ThreadTable**)(RDR2RVA + ThreadTableRVA);
+    *(uintptr_t*)(RDR2RVA + ThreadTableRVA) = (uintptr_t)main;
     *pSomeBool = 1;
-    ThreadTree_Myhead_1 = ThreadTree._Myhead;
-    ThreadTree_Node_1 = ThreadTree._Myhead->_Left;
-    if (ThreadTree._Myhead->_Left != ThreadTree._Myhead)
+    for (const auto& ThreadNode : ThreadTree)
     {
-        do
-        {
-            if ((unsigned int)IS_THREAD_ACTIVE(unusedvar, ThreadTree_Node_1->_MyValue.ThreadId))
-                SCRIPT_HOOK_RDR2_CRITICAL_ERROR("FATAL: Creating threads while previous are still active");
-            if (!ThreadTree_Node_1->_Isnil)
-            {
-                ThreadTree_Node__Right = ThreadTree_Node_1->_Right;
-                if (ThreadTree_Node__Right->_Isnil)
-                {
-                    for (jj = ThreadTree_Node_1->_Parent; !jj->_Isnil; jj = jj->_Parent)
-                    {
-                        if (ThreadTree_Node_1 != jj->_Right)
-                            break;
-                        ThreadTree_Node_1 = jj;
-                    }
-                    ThreadTree_Node_1 = jj;
-                }
-                else
-                {
-                    ThreadTree_Node_1 = ThreadTree_Node_1->_Right;
-                    for (kk = ThreadTree_Node__Right->_Left; !kk->_Isnil; kk = kk->_Left)
-                        ThreadTree_Node_1 = kk;
-                }
-            }
-        } while (ThreadTree_Node_1 != ThreadTree_Myhead_1);
-        ThreadTree_Myhead_1 = ThreadTree._Myhead;
+        if (IS_THREAD_ACTIVE(ThreadNode.first))
+            SCRIPT_HOOK_RDR2_CRITICAL_ERROR("FATAL: Creating threads while previous are still active");
     }
-    _ThreadTreeNode = ThreadTree_Myhead_1->_Left;
-    if (ThreadTree_Myhead_1->_Left != ThreadTree_Myhead_1)
+
+    for (const auto& ThreadNode : ThreadTree)
     {
-        do
-        {
-            ShThreadObject = _ThreadTreeNode->_MyValue.MainShThread.Object;
-            if (ShThreadObject->pFiber)
-                DeleteFiber(ShThreadObject->pFiber);
-            if (!_ThreadTreeNode->_Isnil)
-            {
-                ThreadTreeNode_Right = _ThreadTreeNode->_Right;
-                if (ThreadTreeNode_Right->_Isnil)
-                {
-                    for (mm = _ThreadTreeNode->_Parent; !mm->_Isnil; mm = mm->_Parent)
-                    {
-                        if (_ThreadTreeNode != mm->_Right)
-                            break;
-                        _ThreadTreeNode = mm;
-                    }
-                    _ThreadTreeNode = mm;
-                }
-                else
-                {
-                    _ThreadTreeNode = _ThreadTreeNode->_Right;
-                    for (nn = ThreadTreeNode_Right->_Left; !nn->_Isnil; nn = nn->_Left)
-                        _ThreadTreeNode = nn;
-                }
-            }
-        } while (_ThreadTreeNode != ThreadTree_Myhead_1);
-        ThreadTree_Myhead_1 = ThreadTree._Myhead;
+        if (ThreadNode.second->pFiber)
+            DeleteFiber(ThreadNode.second->pFiber);
     }
-    ThreadTree_Myhead_1_Parent = ThreadTree_Myhead_1->_Parent;
-    ThreadTree_Myhead_1_Parent_1 = ThreadTree_Myhead_1_Parent;
-    if (!ThreadTree_Myhead_1_Parent->_Isnil)
-    {
-        do
-        {
-            RecursiveThreadtreeCleanup(&ThreadTree, ThreadTree_Myhead_1_Parent_1->_Right);
-            ThreadTree_Myhead_1_Parent_1 = ThreadTree_Myhead_1_Parent_1->_Left;
-            ThreadTreeShThreadRefCount = ThreadTree_Myhead_1_Parent->_MyValue.MainShThread.RefCountObj;
-            if (ThreadTreeShThreadRefCount)
-            {
-                if (!_InterlockedDecrement(&ThreadTreeShThreadRefCount->Count_8))
-                {
-                    ThreadTreeShThreadRefCount->Vftbl->RefCount8Release((std::_Ref_count_obj__core::sh_script__*)ThreadTreeShThreadRefCount);
-                    if (!_InterlockedDecrement(&ThreadTreeShThreadRefCount->Count_C))
-                        ThreadTreeShThreadRefCount->Vftbl->RefCountCRelease((std::_Ref_count_obj__core::sh_script__*)ThreadTreeShThreadRefCount);
-                }
-            }
-            j_free(ThreadTree_Myhead_1_Parent);
-            ThreadTree_Myhead_1_Parent = ThreadTree_Myhead_1_Parent_1;
-        } while (!ThreadTree_Myhead_1_Parent_1->_Isnil);
-        ThreadTree_Myhead_1 = ThreadTree._Myhead;
-    }
-    ThreadTree_Myhead_1->_Parent = ThreadTree_Myhead_1;
-    ThreadTree._Myhead->_Left = ThreadTree._Myhead;
-    ThreadTree._Myhead->_Right = ThreadTree._Myhead;
-    ThreadTree._Mysize = 0i64;
+
+    ThreadTree.clear();
+
     REQUEST_SCRIPT_WITH_NAME_HASH_0x6758BF00();
+
     SomeRelevantFunc(0i64);
-    *(_QWORD*)(RDR2RVA + ThreadTableRVA) = 0i64;
-    Construct_ShThread(&sh_thread__);
-    START_NEW_SCRIPT_WITH_NAME_HASH = (__int64(__fastcall*)(_QWORD))GetNativeFromIndex8bits(0xEB1C67C3A5333A92ui64);
+    *(uintptr_t*)(RDR2RVA + ThreadTableRVA) = 0i64;
+
+    std::shared_ptr<core_sh_thread> AudioTest_sh_Thread{};
+
+    auto START_NEW_SCRIPT_WITH_NAME_HASH = (__int64(__fastcall*)(uintptr_t))GetNativeFromIndex8bits(0xEB1C67C3A5333A92ui64);
     if (!START_NEW_SCRIPT_WITH_NAME_HASH)
     {
         GetNativesVer();
-        START_NEW_SCRIPT_WITH_NAME_HASH = (__int64(__fastcall*)(_QWORD))GetNativeAddrFromHash_Wrapper(0xEB1C67C3A5333A92ui64);
+        START_NEW_SCRIPT_WITH_NAME_HASH = (__int64(__fastcall*)(uintptr_t))GetNativeAddrFromHash_Wrapper(0xEB1C67C3A5333A92ui64);
         AppendNativeToVec(0xEB1C67C3A5333A92ui64, (uintptr_t)START_NEW_SCRIPT_WITH_NAME_HASH);
     }
-    NativeAddrFromHash_Wrapper = DefaultNativeValue_From_0xAAAAAAAAAAAAAAAA;
+    auto NativeAddrFromHash_Wrapper = DefaultNativeValue_From_0xAAAAAAAAAAAAAAAA;
     if (!DefaultNativeValue_From_0xAAAAAAAAAAAAAAAA)
     {
         NativeAddrFromHash_Wrapper = GetNativeAddrFromHash_Wrapper(0xAAAAAAAAAAAAAAAAui64);
         DefaultNativeValue_From_0xAAAAAAAAAAAAAAAA = NativeAddrFromHash_Wrapper;
     }
     if (!START_NEW_SCRIPT_WITH_NAME_HASH
-        || START_NEW_SCRIPT_WITH_NAME_HASH == (__int64(__fastcall*)(_QWORD))NativeAddrFromHash_Wrapper)
+        || START_NEW_SCRIPT_WITH_NAME_HASH == (__int64(__fastcall*)(uintptr_t))NativeAddrFromHash_Wrapper)
     {
         SCRIPT_HOOK_RDR2_CRITICAL_ERROR("FATAL: Can't find native 0x%016llX", 0xEB1C67C3A5333A92ui64);
     }
     memset(&NativesContext, 0, sizeof(NativesContext));
-    NativesContext.pArgs = (uintptr_t*)&NativesContext;
-    NativesContext.pRetValues = NativesContext.RetValues;
-    NativesContext.Native = START_NEW_SCRIPT_WITH_NAME_HASH;
-    NativesContext.Args[NativesContext.ArgCount++] = 0x6758BF00i64;
-    NativesContext.pArgs[NativesContext.ArgCount++] = 1024i64;
-    NativesContext.Native(&NativesContext.pRetValues);
-    for (i1 = NativesContext.ResultCount; NativesContext.ResultCount; i1 = NativesContext.ResultCount)
+    NativesContext.GamePart.pArgs = NativesContext.Args;
+    NativesContext.GamePart.pRetValues = NativesContext.RetValues;
+    NativesContext.GamePart.Native = (NativeFunc)START_NEW_SCRIPT_WITH_NAME_HASH;
+    NativesContext.Args[NativesContext.GamePart.ArgCount++] = 0x6758BF00i64;
+    NativesContext.GamePart.pArgs[NativesContext.GamePart.ArgCount++] = 1024i64;
+    NativesContext.GamePart.Native(&NativesContext.GamePart);
+    for (auto i1 = NativesContext.GamePart.ResultCount; NativesContext.GamePart.ResultCount; i1 = NativesContext.GamePart.ResultCount)
     {
-        UselessIndex = i1 - 1;
-        NativesContext.ResultCount = UselessIndex;
-        UselessDstResults = NativesContext.ArgRetDataArrayCopy[UselessIndex];
-        UselessDstResults->dword0 = NativesContext.ArgRetDataArray.Array[(unsigned int)UselessIndex].TickCountWhenPressed;
-        UselessDstResults->dword8 = NativesContext.ArgRetDataArray.Array[(unsigned int)UselessIndex].d2;
-        UselessDstResults->dword10 = NativesContext.ArgRetDataArray.Array[(unsigned int)UselessIndex].WasDownBefore;
+        auto UselessIndex = i1 - 1;
+        NativesContext.GamePart.ResultCount = UselessIndex;
+        auto UselessDstResults = NativesContext.GamePart.ResultDestinations[UselessIndex];
+        UselessDstResults->Dst0 = NativesContext.GamePart.ResultsSrc.Array[UselessIndex].d1;
+        UselessDstResults->Dst8 = NativesContext.GamePart.ResultsSrc.Array[UselessIndex].d2;
+        UselessDstResults->Dst10 = NativesContext.GamePart.ResultsSrc.Array[UselessIndex].d3;
     }
-    NewThreadId = *(unsigned int*)NativesContext.pRetValues;
-    sh_thread__.Object->ThreadIdParam = NewThreadId;
-    ThreadTree_Myhead_Parent = ThreadTree._Myhead->_Parent;
-    InsetionResultNode = ThreadTree._Myhead;
-    while (!ThreadTree_Myhead_Parent->_Isnil)
+    auto NewThreadId = *(unsigned int*)NativesContext.GamePart.pRetValues;
+    AudioTest_sh_Thread->ThreadIdParam = NewThreadId;
+    ThreadTree[NewThreadId] = std::move(AudioTest_sh_Thread);
+ 
+    for (const auto& Script : ScriptVector)
     {
-        if (ThreadTree_Myhead_Parent->_MyValue.ThreadId >= (int)NewThreadId)
+        for (const auto& MainScript : Script->MainScriptsSet)
         {
-            InsetionResultNode = ThreadTree_Myhead_Parent;
-            ThreadTree_Myhead_Parent = ThreadTree_Myhead_Parent->_Left;
-        }
-        else
-        {
-            ThreadTree_Myhead_Parent = ThreadTree_Myhead_Parent->_Right;
-        }
-    }
-    sh_thread__Object = sh_thread__.Object;
-    if (InsetionResultNode == ThreadTree._Myhead
-        || sh_thread__.Object->ThreadIdParam < InsetionResultNode->_MyValue.ThreadId)
-    {
-        MainshThread.Object = sh_thread__.Object;
-        ThreadNode_1 = GetThreadNode(NewThreadId, (__int64)sh_thread__.Object, &MainshThread);
-        std::set::insertToThreadTree(
-            UnusedVar_1,
-            &threadNodeinsertionResult,
-            InsetionResultNode,
-            &ThreadNode_1->_MyValue,
-            ThreadNode_1);
-        InsetionResultNode = threadNodeinsertionResult.iterator;
-        sh_thread__Object = sh_thread__.Object;
-    }
-    ShThreadRefCOutnObj = sh_thread__.RefCountObj;
-    if (sh_thread__.RefCountObj)
-        _InterlockedIncrement(&sh_thread__.RefCountObj->Count_8);
-    ShThreadRefCOutnObj2 = InsetionResultNode->_MyValue.MainShThread.RefCountObj;
-    ShThreadRefcountObj = ShThreadRefCOutnObj2;
-    InsetionResultNode->_MyValue.MainShThread.RefCountObj = ShThreadRefCOutnObj;
-    InsetionResultNode->_MyValue.MainShThread.Object = sh_thread__Object;
-    if (ShThreadRefcountObj)
-    {
-        if (!_InterlockedDecrement(&ShThreadRefcountObj->Count_8))
-        {
-            ShThreadRefCOutnObj2_1 = ShThreadRefCOutnObj2;
-            ShThreadRefCOutnObj2->Vftbl->RefCount8Release((std::_Ref_count_obj__core::sh_script__*)ShThreadRefCOutnObj2);
-            if (!_InterlockedDecrement(&ShThreadRefCOutnObj2_1->Count_C))
-                ShThreadRefCOutnObj2->Vftbl->RefCountCRelease((std::_Ref_count_obj__core::sh_script__*)ShThreadRefCOutnObj2);
+            std::shared_ptr<core_sh_thread> NewMainShThread{};
+            NewMainShThread->ThreadIdParam = START_NEW_SCRIPT_WITH_NAME_AudioTest_HASH();
+            NewMainShThread->sh_script = Script;
+            NewMainShThread->ThreadStartAddress = MainScript;
+            ThreadTree[NewMainShThread->ThreadIdParam] = std::move(NewMainShThread);
         }
     }
-    ScriptVector__Myfirst = ScriptVector._Myfirst;
-    ScriptVector_Mylast = ScriptVector._Mylast;
-    ScriptVector___Mylast = ScriptVector._Mylast;
-    while (ScriptVector__Myfirst != ScriptVector_Mylast)
-    {
-        ScriptVecHead = ScriptVector__Myfirst->Object->Set_Of_LP_SCRIPT_MAIN._Myhead;
-        ScriptVecNode = ScriptVecHead->_Left;
-        if (ScriptVecHead->_Left != ScriptVecHead)
-        {
-            while (1)
-            {
-                SCRIPT_MAIN = (QWORD)ScriptVecNode->SCRIPT_MAIN;
-                Construct_ShThread(&NewMainShThread);
-                START_NEW_SCRIPT_WITH_NAME_HASH_1 = (__int64(__fastcall*)(_QWORD))GetNativeFromIndex8bits(0xEB1C67C3A5333A92ui64);
-                if (!START_NEW_SCRIPT_WITH_NAME_HASH_1)
-                    break;
-            StartNewScript:
-                DefNativevalueIrrelevant_1 = DefaultNativeValue_From_0xAAAAAAAAAAAAAAAA;
-                if (!DefaultNativeValue_From_0xAAAAAAAAAAAAAAAA)
-                {
-                    DefNativevalueIrrelevant = 0xAAAAAAAAAAAAAAAAui64;
-                    memset(&IrrelevantNativeFromhashStruct, 0, 0x2C);
-                    IrrelevantNativeFromhashStruct.f7 = 0i64;
-                    IrrelevantNativeFromhashStruct.f8 = 0i64;
-                    IrrelevantNativeFromhashStruct.flags_high = 1;
-                    IrrelevantNativeFromhashStruct.pHashInAddrOut = (uintptr_t*)&DefNativevalueIrrelevant;
-                    ((void(__fastcall*)(GetNativeAddrFromHashStruct*))(MainAddressTable.GetNativeAddrFromHash.VER[GameVersion]
-                        + RDR2_RVA))(&IrrelevantNativeFromhashStruct);
-                    DefNativevalueIrrelevant_1 = DefNativevalueIrrelevant;
-                    DefaultNativeValue_From_0xAAAAAAAAAAAAAAAA = DefNativevalueIrrelevant;
-                }
-                if (!START_NEW_SCRIPT_WITH_NAME_HASH_1
-                    || START_NEW_SCRIPT_WITH_NAME_HASH_1 == (__int64(__fastcall*)(_QWORD))DefNativevalueIrrelevant_1)
-                {
-                    SCRIPT_HOOK_RDR2_CRITICAL_ERROR("FATAL: Can't find native 0x%016llX", 0xEB1C67C3A5333A92ui64);
-                }
-                memset(&NativesContext, 0, sizeof(NativesContext));
-                NativesContext.pArgs = (uintptr_t*)&NativesContext;
-                NativesContext.pRetValues = NativesContext.RetValues;
-                NativesContext.Native = START_NEW_SCRIPT_WITH_NAME_HASH_1;
-                NativesContext.Args[NativesContext.ArgCount++] = 0x6758BF00i64;
-                NativesContext.pArgs[NativesContext.ArgCount++] = 0x400i64;
-                NativesContext.Native(&NativesContext.pRetValues);
-                ResultCount = NativesContext.ResultCount;
-                if (NativesContext.ResultCount)
-                {
-                    do
-                    {
-                        PointlessResultCount = ResultCount - 1;
-                        NativesContext.ResultCount = PointlessResultCount;
-                        DstresultPointless = NativesContext.ArgRetDataArrayCopy[PointlessResultCount];
-                        DstresultPointless->dword0 = NativesContext.ArgRetDataArray.Array[(unsigned int)PointlessResultCount].TickCountWhenPressed;
-                        DstresultPointless->dword8 = NativesContext.ArgRetDataArray.Array[(unsigned int)PointlessResultCount].d2;
-                        DstresultPointless->dword10 = NativesContext.ArgRetDataArray.Array[(unsigned int)PointlessResultCount].WasDownBefore;
-                        ResultCount = NativesContext.ResultCount;
-                    } while (NativesContext.ResultCount);
-                    ScriptVector_Mylast = ScriptVector___Mylast;
-                }
-                NewMainShThread.Object->ThreadIdParam = *(_DWORD*)NativesContext.pRetValues;
-                NewMainShThread_Object = NewMainShThread.Object;
-                ScriptVector__Myfirst_RefCountObj = ScriptVector__Myfirst->RefCountObj;
-                ScriptVector__Myfirst_Object = ScriptVector__Myfirst->Object;
-                if (ScriptVector__Myfirst_RefCountObj)
-                    _InterlockedIncrement(&ScriptVector__Myfirst_RefCountObj->Count_8);
-                NewMainShThread_Object_sh_script_RefCountObj = NewMainShThread_Object->sh_script.RefCountObj;
-                ThreadIdParam = NewMainShThread_Object_sh_script_RefCountObj;
-                NewMainShThread_Object->sh_script.RefCountObj = ScriptVector__Myfirst_RefCountObj;
-                NewMainShThread_Object->sh_script.Object = ScriptVector__Myfirst_Object;
-                if (ThreadIdParam)
-                {
-                    if (!_InterlockedDecrement(&ThreadIdParam->Count_8))
-                    {
-                        NewMainShThread_Object_sh_script_RefCountObj_1 = NewMainShThread_Object_sh_script_RefCountObj;
-                        NewMainShThread_Object_sh_script_RefCountObj->Vftbl->RefCount8Release(NewMainShThread_Object_sh_script_RefCountObj);
-                        if (!_InterlockedDecrement(&NewMainShThread_Object_sh_script_RefCountObj_1->Count_C))
-                            NewMainShThread_Object_sh_script_RefCountObj->Vftbl->RefCountCRelease(NewMainShThread_Object_sh_script_RefCountObj);
-                    }
-                }
-                NewMainShThread.Object->ThreadStartAddress = SCRIPT_MAIN;
-                ThreadTree_Myhead_Parent_1 = ThreadTree._Myhead->_Parent;
-                ThreadTree_Myhead_2 = ThreadTree._Myhead;
-                NewMainShThread_Object_1 = NewMainShThread.Object;
-                if (!ThreadTree_Myhead_Parent_1->_Isnil)
-                {
-                    ThreadIdParam = (std::_Ref_count_obj__core::sh_script__*)(unsigned int)NewMainShThread.Object->ThreadIdParam;
-                    do
-                    {
-                        if (ThreadTree_Myhead_Parent_1->_MyValue.ThreadId >= (int)ThreadIdParam)
-                        {
-                            ThreadTree_Myhead_2 = ThreadTree_Myhead_Parent_1;
-                            ThreadTree_Myhead_Parent_1 = ThreadTree_Myhead_Parent_1->_Left;
-                        }
-                        else
-                        {
-                            ThreadTree_Myhead_Parent_1 = ThreadTree_Myhead_Parent_1->_Right;
-                        }
-                    } while (!ThreadTree_Myhead_Parent_1->_Isnil);
-                }
-                if (ThreadTree_Myhead_2 == ThreadTree._Myhead
-                    || NewMainShThread.Object->ThreadIdParam < ThreadTree_Myhead_2->_MyValue.ThreadId)
-                {
-                    MainshThread.RefCountObj = (std::_Ref_count_obj__core::sh_thread__*)NewMainShThread.Object;
-                    ShThreadNode = GetThreadNode(
-                        (__int64)ThreadIdParam,
-                        (__int64)NewMainShThread.Object,
-                        (MainRefCountObjStructForShThread*)&MainshThread.RefCountObj);
-                    std::set::insertToThreadTree(
-                        UnusedVar_2,
-                        (std_ThreadTreeResult_std_pair*)&threadNodeinsertionResult.inserted,
-                        ThreadTree_Myhead_2,
-                        &ShThreadNode->_MyValue,
-                        ShThreadNode);
-                    ThreadTree_Myhead_2 = *(ThreadTreeNode**)&threadNodeinsertionResult.inserted;
-                    NewMainShThread_Object_1 = NewMainShThread.Object;
-                }
-                NewMainShThread_RefCountObj = NewMainShThread.RefCountObj;
-                if (NewMainShThread.RefCountObj)
-                    _InterlockedIncrement(&NewMainShThread.RefCountObj->Count_8);
-                ThreadTree_Myhead_2_MyValue_MainShThread_RefCountObj = ThreadTree_Myhead_2->_MyValue.MainShThread.RefCountObj;
-                ShThreadRefCOutnObj2_2 = ThreadTree_Myhead_2_MyValue_MainShThread_RefCountObj;
-                ThreadTree_Myhead_2->_MyValue.MainShThread.RefCountObj = NewMainShThread_RefCountObj;
-                ThreadTree_Myhead_2->_MyValue.MainShThread.Object = NewMainShThread_Object_1;
-                if (ShThreadRefCOutnObj2_2)
-                {
-                    if (!_InterlockedDecrement(&ShThreadRefCOutnObj2_2->Count_8))
-                    {
-                        ThreadTree_Myhead_2_MyValue_MainShThread_RefCountObj_1 = ThreadTree_Myhead_2_MyValue_MainShThread_RefCountObj;
-                        ThreadTree_Myhead_2_MyValue_MainShThread_RefCountObj->Vftbl->RefCount8Release((std::_Ref_count_obj__core::sh_script__*)ThreadTree_Myhead_2_MyValue_MainShThread_RefCountObj);
-                        if (!_InterlockedDecrement(&ThreadTree_Myhead_2_MyValue_MainShThread_RefCountObj_1->Count_C))
-                            ThreadTree_Myhead_2_MyValue_MainShThread_RefCountObj->Vftbl->RefCountCRelease((std::_Ref_count_obj__core::sh_script__*)ThreadTree_Myhead_2_MyValue_MainShThread_RefCountObj);
-                    }
-                }
-                NewMainShThread_RefCountObj_1 = NewMainShThread.RefCountObj;
-                if (NewMainShThread.RefCountObj)
-                {
-                    if (!_InterlockedDecrement(&NewMainShThread.RefCountObj->Count_8))
-                    {
-                        NewMainShThread_RefCountObj_1->Vftbl->RefCount8Release((std::_Ref_count_obj__core::sh_script__*)NewMainShThread_RefCountObj_1);
-                        if (!_InterlockedDecrement(&NewMainShThread_RefCountObj_1->Count_C))
-                            NewMainShThread_RefCountObj_1->Vftbl->RefCountCRelease((std::_Ref_count_obj__core::sh_script__*)NewMainShThread_RefCountObj_1);
-                    }
-                }
-                if (!ScriptVecNode->_Isnil)
-                {
-                    ScriptVecNode_Right = ScriptVecNode->_Right;
-                    if (ScriptVecNode_Right->_Isnil)
-                    {
-                        for (i2 = ScriptVecNode->_Parent; !i2->_Isnil; i2 = i2->_Parent)
-                        {
-                            if (ScriptVecNode != i2->_Right)
-                                break;
-                            ScriptVecNode = i2;
-                        }
-                        ScriptVecNode = i2;
-                    }
-                    else
-                    {
-                        ScriptVecNode = ScriptVecNode->_Right;
-                        for (i3 = ScriptVecNode_Right->_Left; !i3->_Isnil; i3 = i3->_Left)
-                            ScriptVecNode = i3;
-                    }
-                }
-                if (ScriptVecNode == ScriptVecHead)
-                    goto Next;
-            }
-            NativsVersion = NativesVersion;
-            if (!NativesVersion)
-            {
-                if (!DefaultNativeValue_From_0xAAAAAAAAAAAAAAAA)
-                {
-                    DefNativevalueIrrelevant_2 = 0xAAAAAAAAAAAAAAAAui64;
-                    memset(&irrelevantnativesStruct, 0, 44);
-                    irrelevantnativesStruct.f7 = 0i64;
-                    irrelevantnativesStruct.f8 = 0i64;
-                    irrelevantnativesStruct.flags_high = 1;
-                    irrelevantnativesStruct.pHashInAddrOut = (uintptr_t*)&DefNativevalueIrrelevant_2;
-                    ((void(__fastcall*)(GetNativeAddrFromHashStruct*))(MainAddressTable.GetNativeAddrFromHash.VER[GameVersion]
-                        + RDR2_RVA))(&irrelevantnativesStruct);
-                    DefaultNativeValue_From_0xAAAAAAAAAAAAAAAA = DefNativevalueIrrelevant_2;
-                }
-                _BG_SET_TEXT_SCALE = 0xA1253A3C870B6843ui64;
-                memset(&irrelevantnativesStruct_1, 0, 0x2C);
-                irrelevantnativesStruct_1.f7 = 0i64;
-                irrelevantnativesStruct_1.f8 = 0i64;
-                irrelevantnativesStruct_1.flags_high = 1;
-                irrelevantnativesStruct_1.pHashInAddrOut = (uintptr_t*)&_BG_SET_TEXT_SCALE;
-                ((void(__fastcall*)(GetNativeAddrFromHashStruct*))(MainAddressTable.GetNativeAddrFromHash.VER[GameVersion]
-                    + RDR2_RVA))(&irrelevantnativesStruct_1);
-                if (_BG_SET_TEXT_SCALE != DefaultNativeValue_From_0xAAAAAAAAAAAAAAAA)
-                {
-                    NativesVersion = 2;
-                    goto Continue;
-                }
-                Old_SET_TEXT_SCALE = 0x4170B650590B3B00i64;
-                memset(&irrelevantnativesStruct_2, 0, 44);
-                irrelevantnativesStruct_2.f7 = 0i64;
-                irrelevantnativesStruct_2.f8 = 0i64;
-                irrelevantnativesStruct_2.flags_high = 1;
-                irrelevantnativesStruct_2.pHashInAddrOut = (uintptr_t*)&Old_SET_TEXT_SCALE;
-                ((void(__fastcall*)(GetNativeAddrFromHashStruct*))(MainAddressTable.GetNativeAddrFromHash.VER[GameVersion]
-                    + RDR2_RVA))(&irrelevantnativesStruct_2);
-                if (Old_SET_TEXT_SCALE != DefaultNativeValue_From_0xAAAAAAAAAAAAAAAA)
-                {
-                    NativesVersion = 1;
-                    goto OldCase;
-                }
-                NativsVersion = NativesVersion;
-                if (!NativesVersion)
-                    SCRIPT_HOOK_RDR2_CRITICAL_ERROR("FATAL: Can't determinate natives version");
-            }
-            if (NativsVersion == 2)
-            {
-            Continue:
-                START_NEW_SCRIPT_WITH_NAME_HASH_2 = (__int64(__fastcall*)(_QWORD))0xEB1C67C3A5333A92i64;
-                memset(&irrelevantnativesStruct_3, 0, 44);
-                irrelevantnativesStruct_3.f7 = 0i64;
-                irrelevantnativesStruct_3.f8 = 0i64;
-                irrelevantnativesStruct_3.flags_high = 1;
-                irrelevantnativesStruct_3.pHashInAddrOut = (uintptr_t*)&START_NEW_SCRIPT_WITH_NAME_HASH_2;
-                ((void(__fastcall*)(GetNativeAddrFromHashStruct*))(MainAddressTable.GetNativeAddrFromHash.VER[GameVersion]
-                    + RDR2_RVA))(&irrelevantnativesStruct_3);
-                START_NEW_SCRIPT_WITH_NAME_HASH_1 = START_NEW_SCRIPT_WITH_NAME_HASH_2;
-            }
-            else
-            {
-            OldCase:
-                START_NEW_SCRIPT_WITH_NAME_HASH_Old = (__int64(__fastcall*)(_QWORD))0xEB1C67C3A5333A92i64;
-                memset(&irrelevantnativesStruct_4, 0, 44);
-                irrelevantnativesStruct_4.f7 = 0i64;
-                irrelevantnativesStruct_4.f8 = 0i64;
-                irrelevantnativesStruct_4.flags_high = 1;
-                irrelevantnativesStruct_4.pHashInAddrOut = (uintptr_t*)&START_NEW_SCRIPT_WITH_NAME_HASH_Old;
-                ((void(__fastcall*)(GetNativeAddrFromHashStruct*))(MainAddressTable.GetNativeAddrFromHash.VER[GameVersion]
-                    + RDR2_RVA))(&irrelevantnativesStruct_4);
-                START_NEW_SCRIPT_WITH_NAME_HASH_1 = START_NEW_SCRIPT_WITH_NAME_HASH_Old;
-            }
-            AppendNativeToVec(0xEB1C67C3A5333A92ui64, (uintptr_t)START_NEW_SCRIPT_WITH_NAME_HASH_1);
-            goto StartNewScript;
-        }
-    Next:
-        ++ScriptVector__Myfirst;
-    }
-    *(_QWORD*)(RDR2RVA_1 + ThreadTableRVA) = main;
+    *(uintptr_t*)(RDR2RVA_1 + ThreadTableRVA) = (uintptr_t)main;
     SET_SCRIPT_WITH_NAME_audiotest_HASH_AS_NO_LONGER_NEEDED();
-    ThreadTableCopyToCheck = ThreadTableCopyToStore;
-    *(_QWORD*)(RDR2RVA_1 + ThreadTableRVA) = ThreadTableCopyToStore;
+    auto ThreadTableCopyToCheck = ThreadTableCopyToStore;
+    *(uintptr_t*)(RDR2RVA_1 + ThreadTableRVA) = (uintptr_t)ThreadTableCopyToStore;
     *ThreadTableNotEmptyBool = ThreadTableCopyToCheck != 0i64;
-    ScriptHook_Log_Message("CORE: Created %d threads (including control)", ThreadTree._Mysize);
-    CoreOrigFuncReturnValue = CoreOrigFunc_1(main, a2);
-    sh_thread___RefCountObj = sh_thread__.RefCountObj;
-    if (sh_thread__.RefCountObj)
-    {
-        if (!_InterlockedDecrement(&sh_thread__.RefCountObj->Count_8))
-        {
-            sh_thread___RefCountObj->Vftbl->RefCount8Release((std::_Ref_count_obj__core::sh_script__*)sh_thread___RefCountObj);
-            if (!_InterlockedDecrement(&sh_thread___RefCountObj->Count_C))
-                sh_thread___RefCountObj->Vftbl->RefCountCRelease((std::_Ref_count_obj__core::sh_script__*)sh_thread___RefCountObj);
-        }
-    }
+    ScriptHook_Log_Message("CORE: Created %d threads (including control)", ThreadTree.size());
+    auto CoreOrigFuncReturnValue = CoreOrigFunc_1(main, a2);
     return CoreOrigFuncReturnValue;
 }
 
@@ -2244,20 +1670,8 @@ void __fastcall scriptWait(unsigned long WaitTime)
 {
     auto ga3 = MainAddressTable.ga3.VER[GameVersion];
     auto ThreadTable = *(struct_ThreadTable**)(RDR2_RVA + ga3);
-    if (!ThreadTable)
-    {
-        // Thread not found, handle error
-        SCRIPT_HOOK_RDR2_CRITICAL_ERROR("FATAL: scriptWait() called on unk thread");
-        return;
-    }
-
-    DWORD ThreadId = ThreadTable->ThreadId;
-
-    const auto it = std::find_if(ThreadTree.begin(), ThreadTree.end(), [ThreadId](const ThreadTreeMyValue& Thread) {
-        return Thread.ThreadId == ThreadId;
-    });
-
-    if (it == ThreadTree.end()) {
+    
+    if (!ThreadTable || ThreadTree.find(ThreadTable->ThreadId) == ThreadTree.end()) {
         // Thread not found, handle error
         SCRIPT_HOOK_RDR2_CRITICAL_ERROR("FATAL: scriptWait() called on unk thread");
         return;
@@ -2265,17 +1679,7 @@ void __fastcall scriptWait(unsigned long WaitTime)
 
     if (ThreadTable->Count != 2)
     {
-        auto it = std::find_if(ThreadTree.begin(), ThreadTree.end(), [ThreadId](const ThreadTreeMyValue& Thread) {
-            return Thread.ThreadId == ThreadId;
-        });
-
-        if (it == ThreadTree.end()) {
-            ThreadTreeMyValue MyValue{};
-            MyValue.ThreadId = ThreadId;
-            it = ThreadTree.insert(MyValue).first;
-        }
-       
-        it->sh_thread->WaitUntilThisTime = WaitTime + GetTickCount();
+        ThreadTree[ThreadTable->ThreadId]->WaitUntilThisTime = WaitTime + GetTickCount();
         ThreadTable->Count = 1;
     }
     SwitchToFiber(lpFiber);
@@ -2508,10 +1912,10 @@ void __stdcall InitHooks()
     DWORD flOldProtect; // [rsp+30h] [rbp+8h] BYREF
 
     Original_CoreFunc = RDR2_RVA + MainAddressTable.ga2.VER[GameVersion];
-    Original_CoreFuncAddr = *(uintptr_t*)(Original_CoreFunc + 0x10);
+    Original_CoreFuncAddr = *(CoreFuncType*)(Original_CoreFunc + 0x10);
     VirtualProtect((LPVOID)(Original_CoreFunc + 0x10), 8ui64, 0x40u, &flOldProtect);
     oldprot = flOldProtect;
-    *(uintptr_t*)(Original_CoreFunc + 0x10) = (uintptr_t)Core_Hook;
+    *(uintptr_t*)(Original_CoreFunc + 0x10) = (uintptr_t)CoreHook;
     VirtualProtect((LPVOID)(Original_CoreFunc + 0x10), 8ui64, oldprot, &flOldProtect);
     pRegisterClassW_Import = MainAddressTable.ga7.VER[GameVersion] + RDR2_RVA;
     VirtualProtect((LPVOID)pRegisterClassW_Import, 8ui64, 0x40u, &flOldProtect);

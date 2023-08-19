@@ -395,7 +395,10 @@ bool __fastcall FindPattern(unsigned __int64* pResult, std::string Pattern, int 
         if (WasPatternFound)
         {
             if (!Skips)
+            {
                 *pResult = SectionStartAddr;
+                break;
+            }
             --Skips;
         }
     }

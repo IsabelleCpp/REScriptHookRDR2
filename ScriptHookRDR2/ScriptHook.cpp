@@ -1179,7 +1179,7 @@ __int64 __fastcall CoreHook(Core_this_Struct* main, unsigned int a2)
                                 {
                                     for (const auto& MainScript : Script->MainScriptsSet)
                                     {
-                                        std::shared_ptr<core_sh_thread> AudioTest_sh_Thread{};
+                                        std::shared_ptr<core_sh_thread> AudioTest_sh_Thread{ std::make_shared<core_sh_thread>() };
                                         AudioTest_sh_Thread->ThreadIdParam = START_NEW_SCRIPT_WITH_NAME_AudioTest_HASH();
                                         AudioTest_sh_Thread->sh_script = Script;
                                         AudioTest_sh_Thread->ThreadStartAddress = MainScript;
@@ -1262,7 +1262,7 @@ __int64 __fastcall CoreHook(Core_this_Struct* main, unsigned int a2)
     SomeRelevantFunc(0i64);
     *(uintptr_t*)(RDR2RVA + ThreadTableRVA) = 0i64;
 
-    std::shared_ptr<core_sh_thread> AudioTest_sh_Thread{};
+    std::shared_ptr<core_sh_thread> AudioTest_sh_Thread{ std::make_shared<core_sh_thread>() };
 
     auto START_NEW_SCRIPT_WITH_NAME_HASH = (__int64(__fastcall*)(uintptr_t))GetNativeFromIndex8bits(0xEB1C67C3A5333A92ui64);
     if (!START_NEW_SCRIPT_WITH_NAME_HASH)
@@ -1306,7 +1306,7 @@ __int64 __fastcall CoreHook(Core_this_Struct* main, unsigned int a2)
     {
         for (const auto& MainScript : Script->MainScriptsSet)
         {
-            std::shared_ptr<core_sh_thread> NewMainShThread{};
+            std::shared_ptr<core_sh_thread> NewMainShThread{ std::make_shared<core_sh_thread>() };
             NewMainShThread->ThreadIdParam = START_NEW_SCRIPT_WITH_NAME_AudioTest_HASH();
             NewMainShThread->sh_script = Script;
             NewMainShThread->ThreadStartAddress = MainScript;
@@ -1584,7 +1584,7 @@ void __fastcall nativePush64(uintptr_t Arg)
 
 void __fastcall scriptRegister(HMODULE hModule, LP_SCRIPT_MAIN SCRIPT_MAIN)
 {
-    std::shared_ptr<core_sh_script> sh_script; // [rsp+30h] [rbp-D0h] BYREF
+    std::shared_ptr<core_sh_script> sh_script{ std::make_shared<core_sh_script>() }; // [rsp+30h] [rbp-D0h] BYREF
 
     // Get the module file name
     char TempCDllPath[MAX_PATH];

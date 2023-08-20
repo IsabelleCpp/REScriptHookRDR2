@@ -118,45 +118,65 @@ int vsprintf_s_0x400(char* Buffer, const char* Format, ...)
     return vsprintf_s(Buffer, 0x400ui64, Format, ArgList);
 }
 
+int SCRIPT_HOOK_RDR2_ERROR(const char* Format, ...);
+
 void __stdcall CheckForUpdates()
 {
-    char UpdateRequired; // bl
-    HKEY SHKey; // [rsp+0x30] [rbp-0x18] BYREF
-    struct _FILETIME SystemTimeAsFileTime; // [rsp+0x38] [rbp-0x10] BYREF
-    unsigned __int64 CurrentTime; // [rsp+0x50] [rbp+0x8] BYREF
-    DWORD cbData; // [rsp+0x58] [rbp+0x10] BYREF
-    DWORD Type; // [rsp+0x60] [rbp+0x18] BYREF
-    unsigned __int64 SavedTime; // [rsp+0x68] [rbp+0x20] BYREF
+    HKEY SHKey;
 
     if (RegOpenKeyA(HKEY_CURRENT_USER, "Software\\ScriptHookRDR2", &SHKey)
         && RegCreateKeyA(HKEY_CURRENT_USER, "Software\\ScriptHookRDR2", &SHKey))
     {
         return;
     }
+    FILETIME SystemTimeAsFileTime{};
     GetSystemTimeAsFileTime(&SystemTimeAsFileTime);
-    CurrentTime = *(unsigned __int64*)&SystemTimeAsFileTime / 0x989680 + 1240428288;
-    cbData = 4;
-    if (RegQueryValueExA(SHKey, "1.0.1491.17", 0i64, &Type, (LPBYTE)&SavedTime, &cbData))
+    ULARGE_INTEGER SystemTimeAsFileTimeCopy { SystemTimeAsFileTime.dwLowDateTime,  SystemTimeAsFileTime.dwHighDateTime };
+    const DWORD CurrentTime = (SystemTimeAsFileTimeCopy.QuadPart / 0x989680) + 0x49EF6F00;
+    DWORD SavedTime{};
+    DWORD Type{};
+    DWORD cbData = sizeof(SavedTime);
+    LSTATUS Status = RegQueryValueExA(SHKey, "1.0.1491.17", 0, &Type, (LPBYTE)&SavedTime, &cbData);
+
+    bool UpdateRequired = false;
+
+    if (!Status)
     {
-        UpdateRequired = 0;
-    }
-    else
-    {
-        if (Type != 4 || SavedTime + 864000 >= CurrentTime)
+        const DWORD UpdateDate = SavedTime + 864000; // 10 days after the saved time
+        if (Type == REG_DWORD && UpdateDate < CurrentTime)
         {
-            UpdateRequired = 0;
-            goto Exit;
+            UpdateRequired = true;
         }
-        UpdateRequired = 1;
     }
-    RegSetValueExA(SHKey, "1.0.1491.17", 0, 4u, (const BYTE*)&CurrentTime, 4u);
-Exit:
+
+    if (UpdateRequired || Status)
+    RegSetValueExA(SHKey, "1.0.1491.17", 0, REG_DWORD, (const BYTE*)&CurrentTime, sizeof(CurrentTime));
     RegCloseKey(SHKey);
+
     if (UpdateRequired)
     {
-        if (MessageBoxA(0i64, "CHECK FOR SCRIPT HOOK RDR 2 UPDATES ?", "SCRIPT HOOK RDR 2", 0x24u) == 6)
+        if (MessageBoxA(0i64, "CHECK FOR SCRIPT HOOK RDR 2 UPDATES ?", "SCRIPT HOOK RDR 2", MB_ICONQUESTION | MB_YESNO) == IDYES)
         {
-            ShellExecuteA(0i64, 0i64, "http://dev-c.com/rdr2/scripthookrdr2/", 0i64, 0i64, 5);
+            auto SCRIPTHOOK_RDR2_URL = "http://dev-c.com/rdr2/scripthookrdr2/";
+            INT_PTR ErrorCode = (INT_PTR)ShellExecuteA(0i64, 0i64, SCRIPTHOOK_RDR2_URL, 0i64, 0i64, SW_SHOW);
+            if (ErrorCode <= 32)
+            {
+                // Retrieve the system error message for the last-error code
+                LPVOID lpMsgBuf{};
+                DWORD LastError = GetLastError();
+
+                FormatMessageA(
+                    FORMAT_MESSAGE_ALLOCATE_BUFFER |
+                    FORMAT_MESSAGE_FROM_SYSTEM |
+                    FORMAT_MESSAGE_IGNORE_INSERTS,
+                    NULL,
+                    LastError,
+                    MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                    (LPSTR)&lpMsgBuf,
+                    0, NULL);
+                SCRIPT_HOOK_RDR2_ERROR("INIT: Error (0x%016llX) %s (0x%08X) while trying to open URL '%s'", ErrorCode, lpMsgBuf, LastError, SCRIPTHOOK_RDR2_URL);
+                LocalFree(lpMsgBuf);
+            }
             ExitProcess(0);
         }
     }
@@ -335,7 +355,7 @@ bool __fastcall FindPattern(unsigned __int64* pResult, std::string Pattern, int 
     uintptr_t SectionEnd; // r9
     bool WasPatternFound = false; // al
     _Vector_val_1 byteArray; // [rsp+0x28] [rbp-0x71] BYREF
-    Vector_Type1 ByteData; // [rsp+0x40] [rbp-0x59] BYREF
+    Vector_Type1 ByteData{}; // [rsp+0x40] [rbp-0x59] BYREF
     std::string ByteString; // [rsp+0x90] [rbp-0x9] BYREF
 
     if (Pattern.size())
@@ -744,7 +764,7 @@ void AppendNativeToVec(uintptr_t Hash, uintptr_t Address)
         NativesVectorArray[(unsigned __int8)Hash] = NativeVec;
     }
 
-    NativesVecData Data;
+    NativesVecData Data{};
     Data.Hash = Hash;
     Data.Address = Address;
 
